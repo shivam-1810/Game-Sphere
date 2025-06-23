@@ -1,6 +1,5 @@
 'use client';
 
-import { useFormState } from 'react-dom';
 import { createWhoAmIChallenge, type WhoAmIFormState } from '@/lib/actions';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useActionState } from 'react';
 import { useToast } from "@/hooks/use-toast";
 import { Wand2, User, Bot, ArrowLeft } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -33,7 +32,7 @@ export default function WhoAmIPage() {
   
   // Form state
   const initialState: WhoAmIFormState = { message: null, data: null, errors: {} };
-  const [formState, dispatch] = useFormState(createWhoAmIChallenge, initialState);
+  const [formState, dispatch] = useActionState(createWhoAmIChallenge, initialState);
   const [numCharacters, setNumCharacters] = useState(5);
   const [numQuestions, setNumQuestions] = useState(5);
 
