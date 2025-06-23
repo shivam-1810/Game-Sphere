@@ -1,27 +1,49 @@
 'use client'
 
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { RefreshCw, Timer, User, Bot } from 'lucide-react'
+import { RefreshCw, Timer, User, Bot, ArrowLeft } from 'lucide-react'
 import { Progress } from '@/components/ui/progress'
+import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogCancel } from '@/components/ui/alert-dialog'
+import { useRouter } from 'next/navigation'
 
 const sampleText = "The quick brown fox jumps over the lazy dog. This sentence contains all the letters of the alphabet. Pack my box with five dozen liquor jugs. How vexingly quick daft zebras jump. Sphinx of black quartz, judge my vow. The five boxing wizards jump quickly."
 
 const GAME_DURATION = 60; // seconds
 
-const getHighlightedText = (textToHighlight: string, typedText: string) => {
-    return textToHighlight.split('').map((char, index) => {
-        let color = 'text-muted-foreground/50';
-        if (index < typedText.length) {
-            color = char === typedText[index] ? 'text-foreground' : 'text-destructive';
+const HighlightedText = ({ textToHighlight, typedText }: {textToHighlight: string, typedText: string}) => {
+    const scrollRef = useRef<HTMLDivElement>(null);
+    const typedIndex = typedText.length - 1;
+
+    useEffect(() => {
+        if (scrollRef.current) {
+            const activeSpan = scrollRef.current.querySelector(`span[data-index="${typedIndex}"]`);
+            if (activeSpan) {
+                activeSpan.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
         }
-        return <span key={index} className={color}>{char}</span>;
-    });
+    }, [typedIndex]);
+
+    return (
+        <div ref={scrollRef} className="p-4 mb-4 bg-secondary/50 font-mono text-lg leading-relaxed tracking-wider h-32 overflow-y-auto rounded-md">
+            {textToHighlight.split('').map((char, index) => {
+                let color = 'text-muted-foreground/50';
+                if (index < typedText.length) {
+                    color = char === typedText[index] ? 'text-foreground' : 'text-destructive';
+                }
+                return <span key={index} data-index={index} className={color}>{char}</span>;
+            })}
+        </div>
+    );
 };
 
 export default function TypingTestPage() {
+  const router = useRouter();
+  const [showBotConfirm, setShowBotConfirm] = useState(true);
+  const [gameStarted, setGameStarted] = useState(false);
+  
   const [typedText, setTypedText] = useState('');
   const [opponentTypedText, setOpponentTypedText] = useState('');
   
@@ -39,7 +61,29 @@ export default function TypingTestPage() {
 
   const opponentTargetWpm = useMemo(() => Math.floor(Math.random() * 30) + 40, []); // 40-70 WPM
 
-  const resetGame = () => {
+  const calculateResults = useCallback(() => {
+    const elapsedMinutes = (GAME_DURATION - timeLeft) / 60;
+    if (elapsedMinutes <= 0) return;
+
+    // Player results
+    const wordsTyped = typedText.trim().split(/\s+/).length;
+    setWpm(Math.round( wordsTyped / elapsedMinutes ));
+    
+    let correctChars = 0;
+    typedText.split('').forEach((char, i) => {
+      if(sampleText[i] && char === sampleText[i]) {
+        correctChars++;
+      }
+    });
+    setAccuracy(Math.round((correctChars / typedText.length) * 100) || 0);
+
+    // Opponent results
+    const opponentWordsTyped = opponentTypedText.trim().split(/\s+/).length;
+    setOpponentWpm(Math.round( opponentWordsTyped / elapsedMinutes ));
+
+  }, [typedText, opponentTypedText, timeLeft]);
+
+  const resetGame = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current);
     if (opponentTimerRef.current) clearInterval(opponentTimerRef.current);
     setIsStarted(false);
@@ -50,10 +94,17 @@ export default function TypingTestPage() {
     setWpm(0);
     setAccuracy(0);
     setOpponentWpm(0);
+    setGameStarted(true);
+    setShowBotConfirm(false);
     if (inputRef.current) {
+        inputRef.current.value = '';
         inputRef.current.focus();
     }
-  };
+  }, []);
+
+  const initializeGame = useCallback(() => {
+    resetGame();
+  }, [resetGame]);
   
   useEffect(() => {
     // Cleanup timers on unmount
@@ -64,9 +115,10 @@ export default function TypingTestPage() {
   }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (isFinished) return;
+    const currentTypedText = e.target.value;
+    if (isFinished || currentTypedText.length > sampleText.length) return;
     
-    if (!isStarted) {
+    if (!isStarted && currentTypedText.length > 0) {
       setIsStarted(true);
       // Main game timer
       timerRef.current = setInterval(() => {
@@ -84,7 +136,7 @@ export default function TypingTestPage() {
       const charsPerSecond = (opponentTargetWpm * 5) / 60;
       opponentTimerRef.current = setInterval(() => {
         setOpponentTypedText(prev => {
-            const newLength = prev.length + Math.floor(charsPerSecond * (Math.random() * 0.5 + 0.75));
+            const newLength = prev.length + Math.round(charsPerSecond * (Math.random() * 0.5 + 0.75));
             if (newLength >= sampleText.length) {
                 clearInterval(opponentTimerRef.current!);
                 return sampleText;
@@ -94,28 +146,7 @@ export default function TypingTestPage() {
       }, 1000);
     }
     
-    setTypedText(e.target.value);
-  };
-
-  const calculateResults = () => {
-    const elapsedMinutes = GAME_DURATION / 60;
-
-    // Player results
-    if (elapsedMinutes > 0) {
-      setWpm(Math.round( (typedText.length / 5) / elapsedMinutes ));
-    }
-    let correctChars = 0;
-    typedText.split('').forEach((char, i) => {
-      if(sampleText[i] && char === sampleText[i]) {
-        correctChars++;
-      }
-    });
-    setAccuracy(Math.round((correctChars / typedText.length) * 100) || 0);
-
-    // Opponent results
-    if (elapsedMinutes > 0) {
-        setOpponentWpm(Math.round( (opponentTypedText.length / 5) / elapsedMinutes ));
-    }
+    setTypedText(currentTypedText);
   };
 
   useEffect(() => {
@@ -123,7 +154,34 @@ export default function TypingTestPage() {
       if (opponentTimerRef.current) clearInterval(opponentTimerRef.current);
       calculateResults();
     }
-  }, [isFinished, typedText, opponentTypedText]);
+  }, [isFinished, calculateResults]);
+
+  useEffect(() => {
+    if(timeLeft === 0 && !isFinished) {
+      setIsFinished(true);
+    }
+  }, [timeLeft, isFinished]);
+
+  if (!gameStarted) {
+    return (
+       <AlertDialog open={showBotConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Start Typing Race?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This game requires 2 players. Since you're the only one here, would you like to play against a bot?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel asChild>
+                <Button variant="outline" onClick={() => router.back()}><ArrowLeft className="mr-2 h-4 w-4" /> Go Back</Button>
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={initializeGame}>Play with Bot</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    );
+  }
 
   return (
     <div className="flex flex-col items-center gap-8 w-full max-w-4xl">
@@ -145,42 +203,33 @@ export default function TypingTestPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
-            <div>
-              <div className='flex items-center gap-2 mb-2'>
-                <User className="h-5 w-5 text-primary"/>
-                <h3 className='font-semibold'>You</h3>
-              </div>
-              <Progress value={(typedText.length / sampleText.length) * 100} className="mb-2 h-2" />
-              <Card className="p-4 mb-4 bg-secondary/50 font-mono text-sm leading-relaxed tracking-wider h-24 overflow-hidden">
-                  {getHighlightedText(sampleText, typedText)}
-              </Card>
-              <Input
-                ref={inputRef}
-                type="text"
-                placeholder={isStarted ? "" : "Start typing to begin the race..."}
-                value={typedText}
-                onChange={handleInputChange}
-                disabled={isFinished}
-                className="w-full font-mono tracking-wider"
-              />
+          <p className="mb-4 text-muted-foreground">The race ends when the timer hits zero. Type the text below as fast and accurately as you can.</p>
+          
+          <div className='flex flex-col gap-4'>
+            <div className='flex items-center gap-2'>
+              <User className="h-5 w-5 text-primary"/>
+              <h3 className='font-semibold'>You</h3>
             </div>
-            <div>
-              <div className='flex items-center gap-2 mb-2'>
-                  <Bot className="h-5 w-5 text-muted-foreground"/>
-                  <h3 className='font-semibold'>Opponent</h3>
-              </div>
-              <Progress value={(opponentTypedText.length / sampleText.length) * 100} className="mb-2 h-2" />
-               <Card className="p-4 mb-4 bg-secondary/50 font-mono text-sm leading-relaxed tracking-wider h-24 overflow-hidden">
-                  {getHighlightedText(sampleText, opponentTypedText)}
-              </Card>
-              <Input
-                type="text"
-                value={opponentTypedText.substring(0, typedText.length)}
-                disabled
-                className="w-full font-mono tracking-wider"
-              />
+            <Progress value={(typedText.length / sampleText.length) * 100} className="h-2" />
+            
+            <div className='flex items-center gap-2'>
+                <Bot className="h-5 w-5 text-muted-foreground"/>
+                <h3 className='font-semibold'>Opponent</h3>
             </div>
+            <Progress value={(opponentTypedText.length / sampleText.length) * 100} className="h-2" />
+          </div>
+
+          <div className='mt-6'>
+            <HighlightedText textToHighlight={sampleText} typedText={typedText} />
+            <Input
+              ref={inputRef}
+              type="text"
+              placeholder={!isStarted ? "Start typing to begin the race..." : ""}
+              onChange={handleInputChange}
+              disabled={isFinished}
+              className="w-full font-mono tracking-wider text-lg p-4"
+              autoFocus
+            />
           </div>
         </CardContent>
       </Card>
@@ -188,10 +237,12 @@ export default function TypingTestPage() {
       {isFinished && (
         <Card className="w-full shadow-xl bg-accent/20 border-accent">
           <CardHeader>
-            <CardTitle className="font-headline text-2xl text-center">Results</CardTitle>
+            <CardTitle className="font-headline text-2xl text-center">
+                {wpm > opponentWpm ? "You Win!" : "You Lost!"}
+            </CardTitle>
           </CardHeader>
-          <CardContent className="grid grid-cols-2 gap-4 text-center">
-            <div className='border-r'>
+          <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4 text-center">
+            <div className='md:border-r'>
               <h4 className='font-bold mb-2'>Your Stats</h4>
               <div className='flex justify-around'>
                 <div>
@@ -210,6 +261,10 @@ export default function TypingTestPage() {
                 <div>
                   <p className="text-4xl font-bold text-muted-foreground">{opponentWpm}</p>
                   <p className="text-muted-foreground">WPM</p>
+                </div>
+                 <div>
+                  <p className="text-4xl font-bold text-muted-foreground">~95%</p>
+                  <p className="text-muted-foreground">Accuracy</p>
                 </div>
               </div>
             </div>
