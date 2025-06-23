@@ -21,7 +21,7 @@ const HighlightedText = ({ textToHighlight, typedText }: {textToHighlight: strin
         if (scrollRef.current) {
             const activeSpan = scrollRef.current.querySelector(`span[data-index="${typedIndex}"]`);
             if (activeSpan) {
-                activeSpan.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                activeSpan.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
             }
         }
     }, [typedIndex]);

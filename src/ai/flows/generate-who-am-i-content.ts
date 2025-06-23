@@ -11,9 +11,8 @@ import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
 const GenerateWhoAmIContentInputSchema = z.object({
-  theme: z.string().describe('The theme for the game content.'),
+  theme: z.string().describe('The theme or category for the game content.'),
   difficulty: z.enum(['easy', 'medium', 'hard']).describe('The difficulty level of the game.'),
-  ageRange: z.string().describe('The age range of the players.'),
   numCharacters: z.number().min(3).max(10).default(5).describe('The number of characters to generate.'),
   numQuestionsPerCharacter: z.number().min(3).max(10).default(5).describe('The number of questions to generate per character.'),
 });
@@ -39,19 +38,16 @@ const generateWhoAmIContentPrompt = ai.definePrompt({
   output: {schema: GenerateWhoAmIContentOutputSchema},
   prompt: `You are a creative game content generator for the 'Who Am I?' game.
 
-  Your task is to generate characters and questions based on the given theme, difficulty, and age range.
+  Your task is to generate characters and questions based on the given theme and difficulty.
 
-  Theme: {{{theme}}}
+  Theme/Category: {{{theme}}}
   Difficulty: {{{difficulty}}}
-  Age Range: {{{ageRange}}}
 
   Generate {{{numCharacters}}} characters, and for each character, generate {{{numQuestionsPerCharacter}}} questions that players can use to guess the character.
 
   The output should be a JSON object with a 'characters' field, which is an array of characters. Each character should have a 'name' and a 'questions' field. The 'questions' field should be an array of strings.
 
   The difficulty should influence the complexity of the questions. Easy questions should be simple and direct, while hard questions can be more obscure and require more knowledge.
-
-  Ensure that the questions are appropriate for the specified age range.
   `,config: {
     safetySettings: [
       {

@@ -1,58 +1,66 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogCancel } from '@/components/ui/alert-dialog'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, User, Bot } from 'lucide-react'
+import { ArrowLeft, User, Bot, Ticket } from 'lucide-react'
 
 const BINGO_LETTERS = ['B', 'I', 'N', 'G', 'O'];
+const BINGO_WIN_COUNT = 5;
 
-// Generate a classic Bingo card
+// Generate a Bingo card with numbers from 1-24
 const generateBingoCard = () => {
-  const card: (number | string)[][] = [];
-  for (let i = 0; i < 5; i++) {
-    const column: number[] = [];
-    const start = i * 15 + 1;
-    const end = start + 14;
-    while (column.length < 5) {
-      const num = Math.floor(Math.random() * (end - start + 1)) + start;
-      if (!column.includes(num)) {
-        column.push(num);
+  const numbers = Array.from({ length: 24 }, (_, i) => i + 1);
+  // Fisher-Yates shuffle
+  for (let i = numbers.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [numbers[i], numbers[j]] = [numbers[j], numbers[i]];
+  }
+
+  const card: (number | string)[][] = []; // row-major card
+  let numIndex = 0;
+  for (let r = 0; r < 5; r++) {
+    const row = [];
+    for (let c = 0; c < 5; c++) {
+      if (r === 2 && c === 2) {
+        row.push("FREE");
+      } else {
+        row.push(numbers[numIndex++]);
       }
     }
-    card.push(column);
+    card.push(row);
   }
-  // Set free space
-  card[2][2] = "FREE";
   return card;
 };
 
-// Check for Bingo
-const checkBingo = (marked: boolean[][]) => {
+// Count number of Bingos
+const countBingos = (marked: boolean[][]) => {
+  let count = 0;
   // Check rows
   for (let i = 0; i < 5; i++) {
-    if (marked[i].every(Boolean)) return true;
+    if (marked[i].every(Boolean)) count++;
   }
   // Check columns
   for (let i = 0; i < 5; i++) {
-    if (marked.map(row => row[i]).every(Boolean)) return true;
+    if (marked.map(row => row[i]).every(Boolean)) count++;
   }
   // Check diagonals
-  if ([0, 1, 2, 3, 4].map(i => marked[i][i]).every(Boolean)) return true;
-  if ([0, 1, 2, 3, 4].map(i => marked[i][4 - i]).every(Boolean)) return true;
-
-  return false;
+  if ([0, 1, 2, 3, 4].map(i => marked[i][i]).every(Boolean)) count++;
+  if ([0, 1, 2, 3, 4].map(i => marked[i][4 - i]).every(Boolean)) count++;
+  
+  return count;
 };
 
 // Player's Bingo Card component
-const BingoCard = ({ title, card, marked }: { title: string, card: (string | number)[][], marked: boolean[][] }) => {
+const BingoCard = ({ title, card, marked, bingos }: { title: string, card: (string | number)[][], marked: boolean[][], bingos: number }) => {
   return (
     <Card className="w-full md:w-auto shadow-xl">
       <CardHeader>
         <CardTitle className="text-center font-headline text-2xl">{title}</CardTitle>
+        <CardDescription className="text-center font-bold text-primary">Bingos: {bingos} / {BINGO_WIN_COUNT}</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-5 gap-1">
@@ -61,18 +69,16 @@ const BingoCard = ({ title, card, marked }: { title: string, card: (string | num
               {letter}
             </div>
           ))}
-          {card.map((col, colIndex) => (
-             col.map((cell, rowIndex) => (
-                <div
-                  key={`${rowIndex}-${colIndex}`}
-                  className={cn(
-                    "h-14 w-14 text-lg font-bold rounded-lg border-2 flex items-center justify-center",
-                    marked[rowIndex][colIndex] ? "bg-accent text-accent-foreground" : "bg-card",
-                  )}
-                >
-                  {cell}
-                </div>
-              ))
+          {card.flat().map((cell, index) => (
+            <div
+              key={index}
+              className={cn(
+                "h-14 w-14 text-lg font-bold rounded-lg border-2 flex items-center justify-center",
+                marked[Math.floor(index / 5)][index % 5] ? "bg-accent text-accent-foreground" : "bg-card",
+              )}
+            >
+              {cell}
+            </div>
           ))}
         </div>
       </CardContent>
@@ -81,32 +87,17 @@ const BingoCard = ({ title, card, marked }: { title: string, card: (string | num
 }
 
 // Opponent's simplified card display
-const OpponentCardDisplay = ({ marked, turn }: { marked: boolean[][], turn: boolean }) => {
+const OpponentCardDisplay = ({ turn, bingos }: { turn: boolean, bingos: number }) => {
     return (
-        <Card className={cn("w-full md:w-auto shadow-xl", turn && "ring-2 ring-primary")}>
-            <CardHeader>
+        <Card className={cn("w-full md:w-auto shadow-xl flex flex-col justify-center items-center p-6", turn && "ring-2 ring-primary")}>
+            <CardHeader className="p-2">
                 <CardTitle className="text-center font-headline text-2xl flex items-center justify-center gap-2">
-                    <Bot /> Opponent's Card
+                    <Bot /> Opponent
                 </CardTitle>
             </CardHeader>
-            <CardContent>
-                 <div className="grid grid-cols-5 gap-1">
-                    {Array.from({ length: 25 }).map((_, index) => {
-                        const rowIndex = Math.floor(index / 5);
-                        const colIndex = index % 5;
-                        return (
-                             <div
-                                key={index}
-                                className={cn(
-                                    "h-14 w-14 rounded-lg border flex items-center justify-center",
-                                    marked[rowIndex][colIndex] ? "bg-accent" : "bg-secondary/30"
-                                )}
-                             >
-                                {marked[rowIndex][colIndex] && <div className="h-8 w-8 rounded-full bg-accent-foreground/50" />}
-                             </div>
-                        )
-                    })}
-                 </div>
+            <CardContent className="p-2 flex flex-col items-center gap-4">
+                 <Ticket className="w-24 h-24 text-muted-foreground/50"/>
+                 <p className="text-xl font-bold">Bingos: <span className="text-primary">{bingos}</span> / {BINGO_WIN_COUNT}</p>
             </CardContent>
         </Card>
     )
@@ -119,15 +110,15 @@ const CallingBoard = ({ onCall, calledNumbers, disabled }: { onCall: (num: numbe
             <CardHeader>
                 <CardTitle className="text-center">Call a Number</CardTitle>
             </CardHeader>
-            <CardContent className="grid grid-cols-10 sm:grid-cols-15 md:grid-cols-15 gap-1">
-                {Array.from({length: 75}, (_, i) => i+1).map(num => {
+            <CardContent className="grid grid-cols-8 sm:grid-cols-12 gap-1 p-2 md:p-6">
+                {Array.from({length: 24}, (_, i) => i+1).map(num => {
                     const isCalled = calledNumbers.has(num);
                     return (
                         <Button
                             key={num}
                             variant={isCalled ? "secondary" : "outline"}
                             size="icon"
-                            className="h-9 w-9 text-xs"
+                            className="h-10 w-10 text-sm"
                             onClick={() => onCall(num)}
                             disabled={disabled || isCalled}
                         >
@@ -150,6 +141,8 @@ export default function BingoPage() {
   const [opponentCard, setOpponentCard] = useState<(number | string)[][]>([]);
   const [playerMarked, setPlayerMarked] = useState<boolean[][]>([]);
   const [opponentMarked, setOpponentMarked] = useState<boolean[][]>([]);
+  const [playerBingos, setPlayerBingos] = useState(0);
+  const [opponentBingos, setOpponentBingos] = useState(0);
   
   const [calledNumbers, setCalledNumbers] = useState<Set<number>>(new Set());
   const [lastCalled, setLastCalled] = useState<number | null>(null);
@@ -157,17 +150,17 @@ export default function BingoPage() {
   const [winner, setWinner] = useState<string | null>(null);
 
   const initializeGame = useCallback(() => {
-    // Transpose cards so they are column-major for easier logic
-    const transpose = (m: any[][]) => m[0].map((_, i) => m.map(row => row[i]));
-    
-    setPlayerCard(transpose(generateBingoCard()));
-    setOpponentCard(transpose(generateBingoCard()));
+    setPlayerCard(generateBingoCard());
+    setOpponentCard(generateBingoCard());
 
     const initialMarked = Array(5).fill(null).map(() => Array(5).fill(false));
     initialMarked[2][2] = true; // Free space
     setPlayerMarked(JSON.parse(JSON.stringify(initialMarked)));
     setOpponentMarked(JSON.parse(JSON.stringify(initialMarked)));
     
+    setPlayerBingos(1); // Free space counts for diagonals
+    setOpponentBingos(1);
+
     setCalledNumbers(new Set());
     setLastCalled(null);
     setWinner(null);
@@ -176,43 +169,35 @@ export default function BingoPage() {
     setShowBotConfirm(false);
   }, []);
 
-  const handleCallNumber = (num: number) => {
-    if (winner || turn !== 'player') return;
-
-    const newCalled = new Set(calledNumbers).add(num);
-    setCalledNumbers(newCalled);
-    setLastCalled(num);
-
-    // Update marks for both players
-    updateMarks(num);
-    setTurn('opponent');
-  };
-
   const updateMarks = useCallback((num: number) => {
     let playerWon = false;
     let opponentWon = false;
 
     const newPlayerMarked = [...playerMarked];
-    for (let c = 0; c < 5; c++) {
-        for (let r = 0; r < 5; r++) {
-            if(playerCard[c] && playerCard[c][r] === num) {
+    for (let r = 0; r < 5; r++) {
+        for (let c = 0; c < 5; c++) {
+            if(playerCard[r] && playerCard[r][c] === num) {
                 newPlayerMarked[r][c] = true;
             }
         }
     }
     setPlayerMarked(newPlayerMarked);
-    if (checkBingo(newPlayerMarked)) playerWon = true;
+    const pBingos = countBingos(newPlayerMarked);
+    setPlayerBingos(pBingos);
+    if (pBingos >= BINGO_WIN_COUNT) playerWon = true;
 
     const newOpponentMarked = [...opponentMarked];
-    for (let c = 0; c < 5; c++) {
-         for (let r = 0; r < 5; r++) {
-            if(opponentCard[c] && opponentCard[c][r] === num) {
+    for (let r = 0; r < 5; r++) {
+         for (let c = 0; c < 5; c++) {
+            if(opponentCard[r] && opponentCard[r][c] === num) {
                 newOpponentMarked[r][c] = true;
             }
         }
     }
     setOpponentMarked(newOpponentMarked);
-    if(checkBingo(newOpponentMarked)) opponentWon = true;
+    const oBingos = countBingos(newOpponentMarked);
+    setOpponentBingos(oBingos);
+    if(oBingos >= BINGO_WIN_COUNT) opponentWon = true;
 
     if (playerWon && opponentWon) setWinner("It's a Tie!");
     else if (playerWon) setWinner("You");
@@ -220,16 +205,26 @@ export default function BingoPage() {
 
   }, [playerCard, opponentCard, playerMarked, opponentMarked]);
 
+  const handleCallNumber = (num: number) => {
+    if (winner || turn !== 'player') return;
+
+    const newCalled = new Set(calledNumbers).add(num);
+    setCalledNumbers(newCalled);
+    setLastCalled(num);
+    updateMarks(num);
+    setTurn('opponent');
+  };
+
   // Opponent's turn logic
   useEffect(() => {
     if (turn === 'opponent' && !winner) {
         const timeout = setTimeout(() => {
-            // Bot logic: find a number on its card that isn't called yet
+            // Bot logic: find a number that completes a line, or pick a random uncalled number on its card
             let bestNum: number | null = null;
             const availableNumbers: number[] = [];
-            for (let c = 0; c < 5; c++) {
-                for (let r = 0; r < 5; r++) {
-                    const cell = opponentCard[c][r];
+            for (let r = 0; r < 5; r++) {
+                for (let c = 0; c < 5; c++) {
+                    const cell = opponentCard[r][c];
                     if (typeof cell === 'number' && !calledNumbers.has(cell)) {
                         availableNumbers.push(cell);
                     }
@@ -239,11 +234,11 @@ export default function BingoPage() {
             if(availableNumbers.length > 0) {
                  bestNum = availableNumbers[Math.floor(Math.random() * availableNumbers.length)];
             } else {
-                // No numbers left on card, pick a random uncalled number
+                // No numbers left on card, pick a random uncalled number from 1-24
                 let randomNum;
                 do {
-                    randomNum = Math.floor(Math.random() * 75) + 1;
-                } while (calledNumbers.has(randomNum))
+                    randomNum = Math.floor(Math.random() * 24) + 1;
+                } while (calledNumbers.has(randomNum) && calledNumbers.size < 24)
                 bestNum = randomNum;
             }
 
@@ -297,12 +292,12 @@ export default function BingoPage() {
       <div className="flex flex-col lg:flex-row items-start justify-center gap-6 w-full">
         {/* Player's Side */}
         <div className={cn("flex flex-col items-center gap-4", turn === 'player' && "ring-2 ring-primary rounded-lg p-2")}>
-            <BingoCard title="Your Card" card={playerCard} marked={playerMarked} />
+            <BingoCard title="Your Card" card={playerCard} marked={playerMarked} bingos={playerBingos} />
         </div>
 
         {/* Opponent's Side */}
         <div className="flex flex-col items-center gap-4">
-            <OpponentCardDisplay marked={opponentMarked} turn={turn === 'opponent'} />
+            <OpponentCardDisplay turn={turn === 'opponent'} bingos={opponentBingos} />
         </div>
       </div>
 
@@ -310,13 +305,12 @@ export default function BingoPage() {
         <CallingBoard onCall={handleCallNumber} calledNumbers={calledNumbers} disabled={turn !== 'player' || !!winner} />
       </div>
 
-
        <AlertDialog open={!!winner}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{winner === "You" ? "Congratulations, you got BINGO!" : (winner === "Opponent" ? "Better Luck Next Time!" : "It's a Draw!")}</AlertDialogTitle>
+            <AlertDialogTitle>{winner === "You" ? `Congratulations, you got ${BINGO_WIN_COUNT} BINGOs!` : (winner === "Opponent" ? "Better Luck Next Time!" : "It's a Draw!")}</AlertDialogTitle>
             <AlertDialogDescription>
-              {winner === "You" ? "You won the game!" : (winner === "Opponent" ? "The opponent got Bingo first." : "You both got Bingo at the same time!")}
+              {winner === "You" ? "You won the game!" : (winner === "Opponent" ? "The opponent got 5 Bingos first." : "You both got 5 Bingos at the same time!")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

@@ -6,7 +6,6 @@ import { z } from 'zod';
 const WhoAmIFormSchema = z.object({
   theme: z.string().min(3, "Theme must be at least 3 characters long."),
   difficulty: z.enum(['easy', 'medium', 'hard']),
-  ageRange: z.string().min(3, "Age range must be at least 3 characters long."),
   numCharacters: z.coerce.number().min(3).max(10),
   numQuestionsPerCharacter: z.coerce.number().min(3).max(10),
 });
@@ -17,17 +16,20 @@ export type WhoAmIFormState = {
   errors?: {
     theme?: string[];
     difficulty?: string[];
-    ageRange?: string[];
     numCharacters?: string[];
     numQuestionsPerCharacter?: string[];
   };
 };
 
 export async function createWhoAmIChallenge(prevState: WhoAmIFormState, formData: FormData): Promise<WhoAmIFormState> {
+  // Return initial state if form is empty (for resetting)
+  if (!formData.get('theme')) {
+    return { message: null, data: null, errors: {} };
+  }
+  
   const validatedFields = WhoAmIFormSchema.safeParse({
     theme: formData.get('theme'),
     difficulty: formData.get('difficulty'),
-    ageRange: formData.get('ageRange'),
     numCharacters: formData.get('numCharacters'),
     numQuestionsPerCharacter: formData.get('numQuestionsPerCharacter'),
   });
@@ -42,6 +44,12 @@ export async function createWhoAmIChallenge(prevState: WhoAmIFormState, formData
 
   try {
     const gameContent = await generateWhoAmIContent(validatedFields.data as GenerateWhoAmIContentInput);
+    if (!gameContent.characters || gameContent.characters.length === 0) {
+      return {
+        message: 'The AI failed to generate characters. Please try a different category.',
+        data: null,
+      }
+    }
     return {
       message: 'Game created successfully!',
       data: gameContent,
@@ -49,7 +57,7 @@ export async function createWhoAmIChallenge(prevState: WhoAmIFormState, formData
   } catch (error) {
     console.error(error);
     return {
-      message: 'Failed to generate game content. Please try again.',
+      message: 'Failed to generate game content. Please try again later.',
       data: null,
     };
   }

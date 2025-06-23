@@ -32,7 +32,7 @@ export default function WhoAmIPage() {
   
   // Form state
   const initialState: WhoAmIFormState = { message: null, data: null, errors: {} };
-  const [formState, dispatch] = useActionState(createWhoAmIChallenge, initialState);
+  const [formState, dispatch, isPending] = useActionState(createWhoAmIChallenge, initialState);
   const [numCharacters, setNumCharacters] = useState(5);
   const [numQuestions, setNumQuestions] = useState(5);
 
@@ -122,8 +122,8 @@ export default function WhoAmIPage() {
 
   const resetGame = () => {
     // This is a soft reset to go back to the setup screen.
-    // We need to clear the form state for a true reset. A trick is to dispatch with no data.
-    dispatch(new FormData()); 
+    const newForm = new FormData();
+    dispatch(newForm); 
     setGameState('setup');
     setGameData(null);
     setCurrentCharacterIndex(0);
@@ -168,12 +168,22 @@ export default function WhoAmIPage() {
               <CardDescription>Customize the game to your liking.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="space-y-2">
-                <Label htmlFor="theme">Theme</Label>
-                <Input id="theme" name="theme" placeholder="e.g., Famous Scientists, Cartoon Characters" required />
-                {formState.errors?.theme && <p className="text-sm font-medium text-destructive">{formState.errors.theme[0]}</p>}
-              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                 <div className="space-y-2">
+                    <Label htmlFor="category">Category</Label>
+                    <Select name="theme" defaultValue="Famous Scientists">
+                        <SelectTrigger id="category"><SelectValue placeholder="Select a category" /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="Famous Scientists">Famous Scientists</SelectItem>
+                            <SelectItem value="Cartoon Characters">Cartoon Characters</SelectItem>
+                            <SelectItem value="Historical Figures">Historical Figures</SelectItem>
+                            <SelectItem value="Movie Characters">Movie Characters</SelectItem>
+                            <SelectItem value="Superheroes">Superheroes</SelectItem>
+                            <SelectItem value="Mythological Gods">Mythological Gods</SelectItem>
+                        </SelectContent>
+                    </Select>
+                    {formState.errors?.theme && <p className="text-sm font-medium text-destructive">{formState.errors.theme[0]}</p>}
+                  </div>
                   <div className="space-y-2">
                       <Label htmlFor="difficulty">Difficulty</Label>
                       <Select name="difficulty" defaultValue="medium">
@@ -184,11 +194,6 @@ export default function WhoAmIPage() {
                               <SelectItem value="hard">Hard</SelectItem>
                           </SelectContent>
                       </Select>
-                  </div>
-                  <div className="space-y-2">
-                      <Label htmlFor="ageRange">Target Age Range</Label>
-                      <Input id="ageRange" name="ageRange" placeholder="e.g., 8-12 years old" required/>
-                      {formState.errors?.ageRange && <p className="text-sm font-medium text-destructive">{formState.errors.ageRange[0]}</p>}
                   </div>
               </div>
               <div className="space-y-2">
@@ -201,9 +206,9 @@ export default function WhoAmIPage() {
               </div>
             </CardContent>
             <CardFooter>
-              <Button type="submit" className="w-full text-lg font-bold" size="lg">
+              <Button type="submit" className="w-full text-lg font-bold" size="lg" disabled={isPending}>
                 <Wand2 className="mr-2 h-5 w-5"/>
-                Generate Game
+                {isPending ? "Generating..." : "Generate Game"}
               </Button>
             </CardFooter>
           </Card>

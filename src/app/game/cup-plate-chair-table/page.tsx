@@ -38,7 +38,6 @@ const PlayerCard = ({ name, icon, score, choice, revealed, hasChosen, isPlayer =
     );
 };
 
-
 export default function CupPlateChairTablePage() {
   const router = useRouter();
   const [showBotConfirm, setShowBotConfirm] = useState(true);
@@ -70,20 +69,27 @@ export default function CupPlateChairTablePage() {
     startRound();
   }, [startRound]);
 
-
-  const handlePlayerSelect = (item: string) => {
+  const handlePlayerSelect = (itemName: string) => {
     if (!isRoundInProgress || selections.p1) return;
-    setSelections(s => ({ ...s, p1: item }));
+    setSelections(s => ({ ...s, p1: itemName }));
   };
   
   // Make bot selections when player chooses
   useEffect(() => {
-      if (selections.p1 && !selections.p2 && !selections.p3) {
-          const p2choice = items[Math.floor(Math.random() * items.length)].name;
-          const p3choice = items[Math.floor(Math.random() * items.length)].name;
+      if (isRoundInProgress && selections.p1 && !selections.p2 && !selections.p3) {
+          const remainingItems = items.filter(item => item.name !== selections.p1);
+
+          for (let i = remainingItems.length - 1; i > 0; i--) {
+              const j = Math.floor(Math.random() * (i + 1));
+              [remainingItems[i], remainingItems[j]] = [remainingItems[j], remainingItems[i]];
+          }
+
+          const p2choice = remainingItems[0].name;
+          const p3choice = remainingItems[1].name;
+          
           setSelections(s => ({ ...s, p2: p2choice, p3: p3choice }));
       }
-  }, [selections.p1]);
+  }, [selections.p1, isRoundInProgress]);
 
   // Round timer
   useEffect(() => {
@@ -136,16 +142,33 @@ export default function CupPlateChairTablePage() {
     if (isRoundInProgress && (allPlayersSelected || timeIsUp)) {
       if (timerRef.current) clearInterval(timerRef.current);
       
-      const finalSelections = {
-          p1: selections.p1 ?? items[Math.floor(Math.random() * items.length)].name,
-          p2: selections.p2 ?? items[Math.floor(Math.random() * items.length)].name,
-          p3: selections.p3 ?? items[Math.floor(Math.random() * items.length)].name,
-      };
+      let finalSelections = { ...selections };
+
+      if (timeIsUp && !allPlayersSelected) {
+          const available = [...items];
+          for (let i = available.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [available[i], available[j]] = [available[j], available[i]];
+          }
+          
+          let p1choice = selections.p1;
+          if (!p1choice) {
+            p1choice = available.pop()!.name;
+          }
+          
+          const remainingForBots = available.filter(item => item.name !== p1choice);
+          
+          finalSelections = {
+              p1: p1choice,
+              p2: remainingForBots[0].name,
+              p3: remainingForBots[1].name
+          };
+      }
       
       setSelections(finalSelections);
       setRevealed(true);
       setIsRoundInProgress(false);
-      calculateScore(finalSelections.p1, finalSelections.p2, finalSelections.p3);
+      calculateScore(finalSelections.p1!, finalSelections.p2!, finalSelections.p3!);
     }
   }, [selections, timeLeft, isRoundInProgress, calculateScore]);
 
